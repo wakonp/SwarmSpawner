@@ -4,6 +4,7 @@ server in a separate Docker Service
 """
 
 import os
+import subprocess
 import string
 import hashlib
 from textwrap import dedent
@@ -78,7 +79,11 @@ class SwarmSpawner(Spawner):
             """
         )
     )
-
+	
+    teachers = List([], config=True)
+    teacher_image = Unicode('walki12/teachernotebook', config=True)
+    student_image = Unicode('walki12/studentnotebook', config=True)
+	
     tls_config = Dict(config=True,
         help="""Arguments to pass to docker TLS configuration.
         Check for more info: http://docker-py.readthedocs.io/en/stable/tls.html
@@ -168,7 +173,10 @@ class SwarmSpawner(Spawner):
             env['NOTEBOOK_DIR'] = self.notebook_dir
 
         env['JPY_HUB_API_URL'] = self._public_hub_api_url()
-
+        #env['GEN_CERT']='yes'
+        env['JULIA_PKGDIR']='/home/jovyan'
+        env['NB_UID']=subprocess.check_output('docker exec jupyterhub_nfs id -u ' +self.user.name, shell=True).rstrip()
+        env['NB_GID']=subprocess.check_output('docker exec jupyterhub_nfs id -g ' +self.user.name, shell=True).rstrip()
         return env
 
     def _docker(self, method, *args, **kwargs):
@@ -269,21 +277,27 @@ class SwarmSpawner(Spawner):
 
             container_spec.update(user_options.get('container_spec', {}))
 
+            # overwrites image
+            if any(self.user.name in teacher for teacher in self.teachers):
+                container_spec['Image'] = self.teacher_image
+            else:
+                container_spec['Image'] = self.student_image
+
             # iterates over mounts to create
             # a new mounts list of docker.types.Mount
             container_spec['mounts'] = []
             for mount in self.container_spec['mounts']:
                 m = dict(**mount)
                 if 'source' in m:
-                    m['source'] = m['source'].format(username=self.service_owner)
+                    m['source'] = m['source'].format(username=self.user.name)
                 if 'driver_config' in m:
-                    m['driver_config']['options']['device'] = m['driver_config']['options']['device'].format(username=self.service_owner)
+                    m['driver_config']['options']['device'] = m['driver_config']['options']['device'].format(username=self.user.name)
                     m['driver_config'] = docker.types.DriverConfig(**m['driver_config'])
                 container_spec['mounts'].append(docker.types.Mount(**m))
 
             # some Envs are required by the single-user-image
             container_spec['env'] = self.get_env()
-
+			
             if hasattr(self, 'resource_spec'):
                 resource_spec = self.resource_spec
             resource_spec.update(user_options.get('resource_spec', {}))
