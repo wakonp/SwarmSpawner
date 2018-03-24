@@ -79,16 +79,12 @@ class SwarmSpawner(Spawner):
             """
         )
     )
-	
-    teachers = List([], config=True)
-    teacher_image = Unicode('walki12/teachernotebook', config=True)
-    student_image = Unicode('walki12/studentnotebook', config=True)
-	
+
     tls_config = Dict(config=True,
         help="""Arguments to pass to docker TLS configuration.
         Check for more info: http://docker-py.readthedocs.io/en/stable/tls.html
-+        """
-)
+        """
+    )
 
     container_spec = Dict({}, config=True, help="Params to create the service")
     resource_spec = Dict({}, config=True, help="Params about cpu and memory limits")
@@ -175,8 +171,6 @@ class SwarmSpawner(Spawner):
         env['JPY_HUB_API_URL'] = self._public_hub_api_url()
         #env['GEN_CERT']='yes'
         env['JULIA_PKGDIR']='/home/jovyan'
-        env['NB_UID']=subprocess.check_output('docker exec jupyterhub_nfs id -u ' +self.user.name, shell=True).rstrip()
-        env['NB_GID']=subprocess.check_output('docker exec jupyterhub_nfs id -g ' +self.user.name, shell=True).rstrip()
         return env
 
     def _docker(self, method, *args, **kwargs):
@@ -277,11 +271,6 @@ class SwarmSpawner(Spawner):
 
             container_spec.update(user_options.get('container_spec', {}))
 
-            # overwrites image
-            if any(self.user.name in teacher for teacher in self.teachers):
-                container_spec['Image'] = self.teacher_image
-            else:
-                container_spec['Image'] = self.student_image
 
             # iterates over mounts to create
             # a new mounts list of docker.types.Mount
@@ -297,7 +286,7 @@ class SwarmSpawner(Spawner):
 
             # some Envs are required by the single-user-image
             container_spec['env'] = self.get_env()
-			
+
             if hasattr(self, 'resource_spec'):
                 resource_spec = self.resource_spec
             resource_spec.update(user_options.get('resource_spec', {}))
